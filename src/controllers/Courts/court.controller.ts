@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { asyncHandler } from "@/utils/asyncHandler";
 import { ApiError } from "@/utils/ApiError";
 import { ApiResponse } from "@/utils/ApiResponse";
-import { Court } from "@/models/Court";
+import { Court } from "@/models/Court/Court";
 import { UserRole } from "@/models/User";
 
 export const listCourts = asyncHandler(async (req: Request, res: Response) => {

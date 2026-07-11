@@ -5,6 +5,7 @@ import { authenticate, authorize } from "@/middlewares/auth.middleware";
 import { UserRole } from "@/models/User";
 import {
   createBookingSchema,
+  createFixedBookingSchema,
   bookingIdParamSchema,
   updateBookingStatusSchema,
   availabilityQuerySchema,
@@ -20,12 +21,19 @@ router.get(
   validate(availabilityQuerySchema),
   bookingController.getAvailability,
 );
+router.get("/fixed-durations", bookingController.getFixedDurationOptions);
 
 router.post(
   "/",
   authorize(UserRole.CUSTOMER),
   validate(createBookingSchema),
   bookingController.createBooking,
+);
+router.post(
+  "/fixed",
+  authorize(UserRole.CUSTOMER),
+  validate(createFixedBookingSchema),
+  bookingController.createFixedBooking,
 );
 router.get(
   "/me",

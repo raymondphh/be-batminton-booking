@@ -13,9 +13,9 @@ const startServer = async () => {
 
   httpServer.listen(env.port, () => {
     logger.info(
-      `🚀 Server dang chay tai http://localhost:${env.port} [${env.nodeEnv}]`,
+      `Server dang chay tai http://localhost:${env.port} [${env.nodeEnv}]`,
     );
-    logger.info(`🔌 Socket.IO da san sang nhan ket noi real-time`);
+    logger.info(`Socket.IO da san sang nhan ket noi real-time`);
   });
 
   const shutdown = (signal: string) => {
