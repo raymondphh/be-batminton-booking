@@ -11,13 +11,11 @@ import {
 
 const router = Router();
 
-// Tat ca route san yeu cau da dang nhap (ca 3 vai tro deu xem duoc danh sach)
 router.use(authenticate);
 
 router.get("/", courtController.listCourts);
 router.get("/:id", validate(courtIdParamSchema), courtController.getCourtById);
 
-// Chi admin duoc tao / sua / xoa san
 router.post(
   "/",
   authorize(UserRole.ADMIN),

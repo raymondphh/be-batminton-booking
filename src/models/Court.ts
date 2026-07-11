@@ -1,8 +1,8 @@
 import { Schema, model, Document, Types } from "mongoose";
 
 export enum CourtType {
-  FIXED = "fixed", // san co dinh - thue dai han
-  CASUAL = "casual", // san vang lai - dat tung lan
+  FIXED = "fixed",
+  CASUAL = "casual",
 }
 
 export interface ICourt extends Document {
@@ -11,9 +11,9 @@ export interface ICourt extends Document {
   description: string;
   type: CourtType;
   pricePerHour: number;
-  image: string; // emoji hoac URL anh, FE tu quyet dinh cach hien thi
+  image: string;
   isActive: boolean;
-  createdBy: Types.ObjectId; // admin nao tao san nay
+  createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +63,6 @@ const courtSchema = new Schema<ICourt>(
 
 courtSchema.index({ type: 1 });
 courtSchema.index({ isActive: 1 });
-courtSchema.index({ name: "text", description: "text" }); // ho tro tim kiem full-text
+courtSchema.index({ name: "text", description: "text" });
 
 export const Court = model<ICourt>("Court", courtSchema);
