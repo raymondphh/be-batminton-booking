@@ -3,7 +3,44 @@ import { asyncHandler } from "@/utils/asyncHandler";
 import { ApiError } from "@/utils/ApiError";
 import { ApiResponse } from "@/utils/ApiResponse";
 import { Court } from "@/models/Court/Court";
+import { BookingSlotLock } from "@/models/Booking/BookingSlotLock";
 import { UserRole } from "@/models/User";
+
+/**
+ * GET /api/public/court-stats
+ * API CONG KHAI - khong can dang nhap. Dung cho trang chu hien thi
+ * "tong so san" va "so san dang trong ngay bay gio" (theo khung gio hien tai).
+ * Khong tra ve chi tiet booking/nguoi dung, chi tra ve con so tong hop.
+ */
+export const getPublicCourtStats = asyncHandler(
+  async (_req: Request, res: Response) => {
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
+    const currentSlot = `${String(now.getHours()).padStart(2, "0")}:00`;
+
+    const activeCourts = await Court.find({ isActive: true }).select("_id");
+    const totalCourts = activeCourts.length;
+
+    const lockedCourtIds = await BookingSlotLock.find({
+      date,
+      time: currentSlot,
+    }).distinct("court");
+    const lockedSet = new Set(lockedCourtIds.map((id) => id.toString()));
+    const availableNow = activeCourts.filter(
+      (c) => !lockedSet.has(c._id.toString()),
+    ).length;
+
+    res.status(200).json(
+      new ApiResponse("Lay thong ke san thanh cong", {
+        totalCourts,
+        availableNow,
+        bookedNow: totalCourts - availableNow,
+        currentSlot,
+        date,
+      }),
+    );
+  },
+);
 
 export const listCourts = asyncHandler(async (req: Request, res: Response) => {
   const { type, search } = req.query;

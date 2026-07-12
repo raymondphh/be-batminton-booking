@@ -1,7 +1,11 @@
 import { Router } from "express";
 import * as courtController from "@/controllers/Courts/court.controller";
 import { validate } from "@/middlewares/validate.middleware";
-import { authenticate, authorize } from "@/middlewares/auth.middleware";
+import {
+  authenticate,
+  authorize,
+  optionalAuthenticate,
+} from "@/middlewares/auth.middleware";
 import { UserRole } from "@/models/User";
 import {
   createCourtSchema,
@@ -11,10 +15,18 @@ import {
 
 const router = Router();
 
-router.use(authenticate);
+// CONG KHAI - khach chua dang nhap van xem duoc danh sach san (chi thay san dang hoat dong).
+// Dung optionalAuthenticate de admin/manager DA dang nhap van xem duoc ca san dang an.
+router.get("/", optionalAuthenticate, courtController.listCourts);
+router.get(
+  "/:id",
+  optionalAuthenticate,
+  validate(courtIdParamSchema),
+  courtController.getCourtById,
+);
 
-router.get("/", courtController.listCourts);
-router.get("/:id", validate(courtIdParamSchema), courtController.getCourtById);
+// Tu day tro xuong BAT BUOC dang nhap
+router.use(authenticate);
 
 router.post(
   "/",

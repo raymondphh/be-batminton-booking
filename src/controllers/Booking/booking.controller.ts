@@ -16,6 +16,13 @@ import { TIME_SLOTS } from "@/config/timeSlots";
 import { FIXED_DURATION_OPTIONS } from "@/config/fixedDurations";
 import { getIO } from "@/config/socket";
 import { logger } from "@/config/logger";
+import {
+  getStartOfToday,
+  getStartOfWeek,
+  getStartOfMonth,
+  getStartOfQuarter,
+  getStartOfYear,
+} from "@/utils/dateRange";
 
 // Kiem tra cac khung gio co lien tiep nhau khong, dua theo vi tri trong TIME_SLOTS
 const areConsecutive = (slots: string[]): boolean => {
@@ -619,5 +626,211 @@ export const cancelMyBooking = asyncHandler(
       await emitSlotsUpdated(booking.court.toString(), d);
     }
     emitBookingUpdated(booking, "booking:updated");
+  },
+);
+
+const sumRevenueFrom = async (fromDate: string, courtId?: string) => {
+  const match: Record<string, unknown> = {
+    status: { $ne: BookingStatus.CANCELLED },
+    date: { $gte: fromDate },
+  };
+  if (courtId) match.court = new mongoose.Types.ObjectId(courtId);
+
+  const result = await Booking.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: null,
+        revenue: { $sum: "$totalPrice" },
+        bookingsCount: { $sum: 1 },
+      },
+    },
+  ]);
+
+  return result[0]
+    ? {
+        revenue: result[0].revenue as number,
+        bookingsCount: result[0].bookingsCount as number,
+      }
+    : { revenue: 0, bookingsCount: 0 };
+};
+
+/**
+ * GET /api/bookings/revenue/summary?courtId=
+ * Tong quan doanh thu nhanh: hom nay / tuan nay / thang nay / quy nay / nam nay.
+ */
+export const getRevenueSummary = asyncHandler(
+  async (req: Request, res: Response) => {
+    const courtId = req.query.courtId as string | undefined;
+
+    const [today, thisWeek, thisMonth, thisQuarter, thisYear] =
+      await Promise.all([
+        sumRevenueFrom(getStartOfToday(), courtId),
+        sumRevenueFrom(getStartOfWeek(), courtId),
+        sumRevenueFrom(getStartOfMonth(), courtId),
+        sumRevenueFrom(getStartOfQuarter(), courtId),
+        sumRevenueFrom(getStartOfYear(), courtId),
+      ]);
+
+    res.status(200).json(
+      new ApiResponse("Lay tong quan doanh thu thanh cong", {
+        today,
+        thisWeek,
+        thisMonth,
+        thisQuarter,
+        thisYear,
+      }),
+    );
+  },
+);
+
+/**
+ * GET /api/bookings/revenue/report?groupBy=day|week|month|quarter|year&from=&to=&courtId=
+ * Bao cao doanh thu chi tiet theo tung moc thoi gian, dung ve bieu do/bang.
+ */
+export const getRevenueReport = asyncHandler(
+  async (req: Request, res: Response) => {
+    const groupBy = (req.query.groupBy as string) || "day";
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    const courtId = req.query.courtId as string | undefined;
+
+    if (!["day", "week", "month", "quarter", "year"].includes(groupBy)) {
+      throw ApiError.badRequest(
+        "groupBy khong hop le (day|week|month|quarter|year)",
+        "INVALID_GROUP_BY",
+      );
+    }
+
+    const match: Record<string, unknown> = {
+      status: { $ne: BookingStatus.CANCELLED },
+    };
+    if (from || to) {
+      const dateFilter: Record<string, string> = {};
+      if (from) dateFilter.$gte = from;
+      if (to) dateFilter.$lte = to;
+      match.date = dateFilter;
+    }
+    if (courtId) match.court = new mongoose.Types.ObjectId(courtId);
+
+    let periodKeyExpr: unknown;
+    switch (groupBy) {
+      case "day":
+        periodKeyExpr = "$date";
+        break;
+      case "week": {
+        const dateObj = { $dateFromString: { dateString: "$date" } };
+        periodKeyExpr = {
+          $concat: [
+            { $toString: { $isoWeekYear: dateObj } },
+            "-W",
+            {
+              $cond: [
+                { $lt: [{ $isoWeek: dateObj }, 10] },
+                { $concat: ["0", { $toString: { $isoWeek: dateObj } }] },
+                { $toString: { $isoWeek: dateObj } },
+              ],
+            },
+          ],
+        };
+        break;
+      }
+      case "month":
+        periodKeyExpr = { $substrCP: ["$date", 0, 7] }; // "YYYY-MM"
+        break;
+      case "quarter":
+        periodKeyExpr = {
+          $concat: [
+            { $substrCP: ["$date", 0, 4] },
+            "-Q",
+            {
+              $toString: {
+                $ceil: {
+                  $divide: [{ $toInt: { $substrCP: ["$date", 5, 2] } }, 3],
+                },
+              },
+            },
+          ],
+        };
+        break;
+      case "year":
+        periodKeyExpr = { $substrCP: ["$date", 0, 4] };
+        break;
+    }
+
+    const rows = await Booking.aggregate([
+      { $match: match },
+      { $addFields: { periodKey: periodKeyExpr } },
+      {
+        $group: {
+          _id: "$periodKey",
+          revenue: { $sum: "$totalPrice" },
+          bookingsCount: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const data = rows.map((r) => ({
+      period: r._id as string,
+      revenue: r.revenue as number,
+      bookingsCount: r.bookingsCount as number,
+    }));
+
+    const totalRevenue = data.reduce((s, r) => s + r.revenue, 0);
+    const totalBookings = data.reduce((s, r) => s + r.bookingsCount, 0);
+
+    res.status(200).json(
+      new ApiResponse("Lay bao cao doanh thu thanh cong", {
+        groupBy,
+        data,
+        totalRevenue,
+        totalBookings,
+      }),
+    );
+  },
+);
+
+/**
+ * GET /api/bookings/revenue/by-court?from=&to=
+ * Doanh thu theo tung san, sap xep giam dan - de biet san nao dang sinh loi nhieu nhat.
+ */
+export const getRevenueByCourt = asyncHandler(
+  async (req: Request, res: Response) => {
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+
+    const match: Record<string, unknown> = {
+      status: { $ne: BookingStatus.CANCELLED },
+    };
+    if (from || to) {
+      const dateFilter: Record<string, string> = {};
+      if (from) dateFilter.$gte = from;
+      if (to) dateFilter.$lte = to;
+      match.date = dateFilter;
+    }
+
+    const rows = await Booking.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { court: "$court", courtName: "$courtName" },
+          revenue: { $sum: "$totalPrice" },
+          bookingsCount: { $sum: 1 },
+        },
+      },
+      { $sort: { revenue: -1 } },
+    ]);
+
+    const data = rows.map((r) => ({
+      courtId: (r._id.court as mongoose.Types.ObjectId).toString(),
+      courtName: r._id.courtName as string,
+      revenue: r.revenue as number,
+      bookingsCount: r.bookingsCount as number,
+    }));
+
+    res
+      .status(200)
+      .json(new ApiResponse("Lay doanh thu theo san thanh cong", { data }));
   },
 );

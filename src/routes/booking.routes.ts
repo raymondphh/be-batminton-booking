@@ -14,14 +14,18 @@ import {
 
 const router = Router();
 
-router.use(authenticate);
-
+// CONG KHAI - khach chua dang nhap van xem duoc khung gio trong/da dat va cac goi co dinh,
+// de xem lich truoc khi quyet dinh dang nhap dat san. Khong lo lo thong tin nhay cam
+// (chi tra ve danh sach gio da bi khoa, khong tra ten khach/booking).
 router.get(
   "/availability",
   validate(availabilityQuerySchema),
   bookingController.getAvailability,
 );
 router.get("/fixed-durations", bookingController.getFixedDurationOptions);
+
+// Tu day tro xuong BAT BUOC dang nhap
+router.use(authenticate);
 
 router.post(
   "/",
@@ -52,6 +56,21 @@ router.get(
   authorize(UserRole.ADMIN, UserRole.MANAGER),
   validate(listBookingsQuerySchema),
   bookingController.listAllBookings,
+);
+router.get(
+  "/revenue/summary",
+  authorize(UserRole.ADMIN, UserRole.MANAGER),
+  bookingController.getRevenueSummary,
+);
+router.get(
+  "/revenue/report",
+  authorize(UserRole.ADMIN, UserRole.MANAGER),
+  bookingController.getRevenueReport,
+);
+router.get(
+  "/revenue/by-court",
+  authorize(UserRole.ADMIN, UserRole.MANAGER),
+  bookingController.getRevenueByCourt,
 );
 router.patch(
   "/:id/status",
