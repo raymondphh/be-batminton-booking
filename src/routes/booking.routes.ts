@@ -5,7 +5,6 @@ import { authenticate, authorize } from "@/middlewares/auth.middleware";
 import { UserRole } from "@/models/User";
 import {
   createBookingSchema,
-  createFixedBookingSchema,
   bookingIdParamSchema,
   updateBookingStatusSchema,
   availabilityQuerySchema,
@@ -14,15 +13,12 @@ import {
 
 const router = Router();
 
-// CONG KHAI - khach chua dang nhap van xem duoc khung gio trong/da dat va cac goi co dinh,
-// de xem lich truoc khi quyet dinh dang nhap dat san. Khong lo lo thong tin nhay cam
-// (chi tra ve danh sach gio da bi khoa, khong tra ten khach/booking).
+// CONG KHAI - khach chua dang nhap van xem duoc khung gio trong/da dat.
 router.get(
   "/availability",
   validate(availabilityQuerySchema),
   bookingController.getAvailability,
 );
-router.get("/fixed-durations", bookingController.getFixedDurationOptions);
 
 // Tu day tro xuong BAT BUOC dang nhap
 router.use(authenticate);
@@ -32,12 +28,6 @@ router.post(
   authorize(UserRole.CUSTOMER),
   validate(createBookingSchema),
   bookingController.createBooking,
-);
-router.post(
-  "/fixed",
-  authorize(UserRole.CUSTOMER),
-  validate(createFixedBookingSchema),
-  bookingController.createFixedBooking,
 );
 router.get(
   "/me",

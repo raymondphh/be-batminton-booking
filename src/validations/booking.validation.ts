@@ -20,32 +20,9 @@ export const createBookingSchema = z.object({
       )
       .min(1, "Can chon it nhat 1 khung gio")
       .max(TIME_SLOTS.length, "So khung gio vuot qua gioi han"),
-    notes: z.string().trim().max(500).optional(),
-  }),
-});
-
-export const createFixedBookingSchema = z.object({
-  body: z.object({
-    courtId: z.string().regex(objectIdRegex, "ID san khong hop le"),
-    startDate: z
-      .string()
-      .regex(dateRegex, "Ngay bat dau khong hop le (dinh dang YYYY-MM-DD)"),
-    slots: z
-      .array(
-        z
-          .string()
-          .refine((s) => TIME_SLOTS.includes(s), {
-            message: "Khung gio khong hop le",
-          }),
-      )
-      .min(1, "Can chon it nhat 1 khung gio")
-      .max(TIME_SLOTS.length, "So khung gio vuot qua gioi han"),
-    durationMonths: z.union(
-      [z.literal(1), z.literal(2), z.literal(3), z.literal(6), z.literal(12)],
-      {
-        required_error: "Thoi han goi la bat buoc",
-      },
-    ),
+    bookingType: z.enum(["fixed", "casual"], {
+      required_error: "Vui long chon loai dat san (co dinh hoac vang lai)",
+    }),
     notes: z.string().trim().max(500).optional(),
   }),
 });

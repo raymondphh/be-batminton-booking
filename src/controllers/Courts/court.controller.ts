@@ -6,12 +6,6 @@ import { Court } from "@/models/Court/Court";
 import { BookingSlotLock } from "@/models/Booking/BookingSlotLock";
 import { UserRole } from "@/models/User";
 
-/**
- * GET /api/public/court-stats
- * API CONG KHAI - khong can dang nhap. Dung cho trang chu hien thi
- * "tong so san" va "so san dang trong ngay bay gio" (theo khung gio hien tai).
- * Khong tra ve chi tiet booking/nguoi dung, chi tra ve con so tong hop.
- */
 export const getPublicCourtStats = asyncHandler(
   async (_req: Request, res: Response) => {
     const now = new Date();
@@ -42,8 +36,13 @@ export const getPublicCourtStats = asyncHandler(
   },
 );
 
+/**
+ * GET /api/courts?search=&page=&limit=
+ * CONG KHAI. Moi san gio co 2 muc gia (pricePerHourFixed, pricePerHourCasual),
+ * khong con phan loai "san co dinh / san vang lai" rieng biet nua.
+ */
 export const listCourts = asyncHandler(async (req: Request, res: Response) => {
-  const { type, search } = req.query;
+  const { search } = req.query;
   const page = Math.max(parseInt((req.query.page as string) || "1", 10), 1);
   const limit = Math.min(
     Math.max(parseInt((req.query.limit as string) || "50", 10), 1),
@@ -58,10 +57,6 @@ export const listCourts = asyncHandler(async (req: Request, res: Response) => {
     filter.isActive = true;
   } else if (req.query.isActive !== undefined) {
     filter.isActive = req.query.isActive === "true";
-  }
-
-  if (type === "fixed" || type === "casual") {
-    filter.type = type;
   }
 
   if (search && typeof search === "string" && search.trim()) {
@@ -103,13 +98,20 @@ export const getCourtById = asyncHandler(
 );
 
 export const createCourt = asyncHandler(async (req: Request, res: Response) => {
-  const { name, description, type, pricePerHour, image, isActive } = req.body;
+  const {
+    name,
+    description,
+    pricePerHourFixed,
+    pricePerHourCasual,
+    image,
+    isActive,
+  } = req.body;
 
   const court = await Court.create({
     name,
     description,
-    type,
-    pricePerHour,
+    pricePerHourFixed,
+    pricePerHourCasual,
     image,
     isActive,
     createdBy: req.user!.id,
@@ -125,8 +127,8 @@ export const updateCourt = asyncHandler(async (req: Request, res: Response) => {
   const allowedFields = [
     "name",
     "description",
-    "type",
-    "pricePerHour",
+    "pricePerHourFixed",
+    "pricePerHourCasual",
     "image",
     "isActive",
   ] as const;

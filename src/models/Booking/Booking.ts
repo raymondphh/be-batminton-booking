@@ -8,32 +8,24 @@ export enum BookingStatus {
 }
 
 export enum BookingType {
-  CASUAL = "casual", // dat le 1 buoi
-  FIXED = "fixed", // dang ky goi dai han, lap lai hang tuan
+  CASUAL = "casual", // khach chon muc gia vang lai cho don nay
+  FIXED = "fixed", // khach chon muc gia co dinh cho don nay
 }
 
 export interface IBooking extends Document {
   _id: Types.ObjectId;
   user: Types.ObjectId;
-  userName: string; // snapshot ten khach hang tai thoi diem dat
+  userName: string;
   court: Types.ObjectId;
-  courtName: string; // snapshot ten san
-  courtType: string; // snapshot loai san ('fixed' | 'casual')
+  courtName: string;
   bookingType: BookingType;
-  date: string; // voi 'fixed': ngay bat dau (= startDate), giu de tuong thich hien thi chung
-  slots: string[]; // vi du ["08:00","09:00","10:00"]
+  date: string;
+  slots: string[];
   startTime: string;
   endTime: string;
   hours: number;
-  pricePerHour: number; // snapshot gia tai thoi diem dat
+  pricePerHour: number;
   totalPrice: number;
-  // Cac field chi co gia tri khi bookingType = 'fixed'
-  durationMonths?: 1 | 2 | 3 | 6 | 12;
-  startDate?: string;
-  endDate?: string;
-  occurrenceDates?: string[]; // toan bo ngay cu the trong goi (moi tuan 1 ngay)
-  discountPercent?: number;
-  originalTotalPrice?: number; // gia truoc khi ap dung giam gia goi dai han
   status: BookingStatus;
   notes: string;
   cancelledBy?: Types.ObjectId | null;
@@ -58,12 +50,10 @@ const bookingSchema = new Schema<IBooking>(
       index: true,
     },
     courtName: { type: String, required: true },
-    courtType: { type: String, required: true },
     bookingType: {
       type: String,
       enum: Object.values(BookingType),
-      default: BookingType.CASUAL,
-      index: true,
+      required: true,
     },
     date: { type: String, required: true, index: true },
     slots: {
@@ -79,12 +69,6 @@ const bookingSchema = new Schema<IBooking>(
     hours: { type: Number, required: true, min: 1 },
     pricePerHour: { type: Number, required: true, min: 0 },
     totalPrice: { type: Number, required: true, min: 0 },
-    durationMonths: { type: Number, enum: [1, 2, 3, 6, 12] },
-    startDate: { type: String },
-    endDate: { type: String },
-    occurrenceDates: { type: [String], default: undefined },
-    discountPercent: { type: Number, default: 0 },
-    originalTotalPrice: { type: Number },
     status: {
       type: String,
       enum: Object.values(BookingStatus),

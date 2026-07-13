@@ -1,17 +1,12 @@
 import { Schema, model, Document, Types } from "mongoose";
 
-export enum CourtType {
-  FIXED = "fixed",
-  CASUAL = "casual",
-}
-
 export interface ICourt extends Document {
   _id: Types.ObjectId;
   name: string;
   description: string;
-  type: CourtType;
-  pricePerHour: number;
-  image: string;
+  pricePerHourFixed: number; // gia/gio khi khach chon dat kieu "co dinh"
+  pricePerHourCasual: number; // gia/gio khi khach chon dat kieu "vang lai"
+  image: string; // key icon MUI, vi du "sports_tennis" - xem src/config/courtIcons.tsx o FE
   isActive: boolean;
   createdBy: Types.ObjectId;
   createdAt: Date;
@@ -33,20 +28,19 @@ const courtSchema = new Schema<ICourt>(
       maxlength: 500,
       default: "",
     },
-    type: {
-      type: String,
-      enum: Object.values(CourtType),
-      required: true,
-      default: CourtType.CASUAL,
-    },
-    pricePerHour: {
+    pricePerHourFixed: {
       type: Number,
-      required: [true, "Gia thue theo gio la bat buoc"],
-      min: [0, "Gia thue khong duoc am"],
+      required: [true, "Gia co dinh la bat buoc"],
+      min: [0, "Gia khong duoc am"],
+    },
+    pricePerHourCasual: {
+      type: Number,
+      required: [true, "Gia vang lai la bat buoc"],
+      min: [0, "Gia khong duoc am"],
     },
     image: {
       type: String,
-      default: "🏸",
+      default: "sports_tennis",
     },
     isActive: {
       type: Boolean,
@@ -61,7 +55,6 @@ const courtSchema = new Schema<ICourt>(
   { timestamps: true },
 );
 
-courtSchema.index({ type: 1 });
 courtSchema.index({ isActive: 1 });
 courtSchema.index({ name: "text", description: "text" });
 
