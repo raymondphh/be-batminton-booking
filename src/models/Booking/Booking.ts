@@ -8,8 +8,13 @@ export enum BookingStatus {
 }
 
 export enum BookingType {
-  CASUAL = "casual", // khach chon muc gia vang lai cho don nay
-  FIXED = "fixed", // khach chon muc gia co dinh cho don nay
+  FIXED = "fixed",
+  CASUAL = "casual",
+}
+
+export interface IPriceBreakdownItem {
+  time: string;
+  price: number;
 }
 
 export interface IBooking extends Document {
@@ -18,6 +23,7 @@ export interface IBooking extends Document {
   userName: string;
   court: Types.ObjectId;
   courtName: string;
+  categoryName: string;
   bookingType: BookingType;
   date: string;
   slots: string[];
@@ -26,6 +32,7 @@ export interface IBooking extends Document {
   hours: number;
   pricePerHour: number;
   totalPrice: number;
+  priceBreakdown: IPriceBreakdownItem[];
   status: BookingStatus;
   notes: string;
   cancelledBy?: Types.ObjectId | null;
@@ -33,6 +40,14 @@ export interface IBooking extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const priceBreakdownSchema = new Schema<IPriceBreakdownItem>(
+  {
+    time: { type: String, required: true },
+    price: { type: Number, required: true },
+  },
+  { _id: false },
+);
 
 const bookingSchema = new Schema<IBooking>(
   {
@@ -50,6 +65,7 @@ const bookingSchema = new Schema<IBooking>(
       index: true,
     },
     courtName: { type: String, required: true },
+    categoryName: { type: String, required: true },
     bookingType: {
       type: String,
       enum: Object.values(BookingType),
@@ -69,6 +85,7 @@ const bookingSchema = new Schema<IBooking>(
     hours: { type: Number, required: true, min: 1 },
     pricePerHour: { type: Number, required: true, min: 0 },
     totalPrice: { type: Number, required: true, min: 0 },
+    priceBreakdown: { type: [priceBreakdownSchema], default: [] },
     status: {
       type: String,
       enum: Object.values(BookingStatus),

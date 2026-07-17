@@ -4,6 +4,7 @@ import adminRoutes from "./admin.routes";
 import courtRoutes from "./court.routes";
 import bookingRoutes from "./booking.routes";
 import publicRoutes from "./public.routes";
+import courtCategoryRoutes from "./courtCategory.routes";
 
 const router = Router();
 
@@ -20,5 +21,5 @@ router.use("/auth", authRoutes);
 router.use("/admin", adminRoutes);
 router.use("/courts", courtRoutes);
 router.use("/bookings", bookingRoutes);
-
+router.use("/court-categories", courtCategoryRoutes);
 export default router;

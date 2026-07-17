@@ -4,9 +4,8 @@ export interface ICourt extends Document {
   _id: Types.ObjectId;
   name: string;
   description: string;
-  pricePerHourFixed: number; // gia/gio khi khach chon dat kieu "co dinh"
-  pricePerHourCasual: number; // gia/gio khi khach chon dat kieu "vang lai"
-  image: string; // key icon MUI, vi du "sports_tennis" - xem src/config/courtIcons.tsx o FE
+  category: Types.ObjectId; // ref CourtCategory - quyet dinh toan bo bang gia theo gio cua san nay
+  image: string;
   isActive: boolean;
   createdBy: Types.ObjectId;
   createdAt: Date;
@@ -22,40 +21,21 @@ const courtSchema = new Schema<ICourt>(
       minlength: 2,
       maxlength: 100,
     },
-    description: {
-      type: String,
-      trim: true,
-      maxlength: 500,
-      default: "",
-    },
-    pricePerHourFixed: {
-      type: Number,
-      required: [true, "Gia co dinh la bat buoc"],
-      min: [0, "Gia khong duoc am"],
-    },
-    pricePerHourCasual: {
-      type: Number,
-      required: [true, "Gia vang lai la bat buoc"],
-      min: [0, "Gia khong duoc am"],
-    },
-    image: {
-      type: String,
-      default: "sports_tennis",
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    createdBy: {
+    description: { type: String, trim: true, maxlength: 500, default: "" },
+    category: {
       type: Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+      ref: "CourtCategory",
+      required: [true, "Loai san la bat buoc"],
     },
+    image: { type: String, default: "sports_tennis" },
+    isActive: { type: Boolean, default: true },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true },
 );
 
 courtSchema.index({ isActive: 1 });
+courtSchema.index({ category: 1 });
 courtSchema.index({ name: "text", description: "text" });
 
 export const Court = model<ICourt>("Court", courtSchema);

@@ -3,6 +3,7 @@ import { asyncHandler } from "@/utils/asyncHandler";
 import { ApiError } from "@/utils/ApiError";
 import { ApiResponse } from "@/utils/ApiResponse";
 import { Court } from "@/models/Court/Court";
+import { CourtCategory } from "@/models/Court/CourtCategory";
 import { BookingSlotLock } from "@/models/Booking/BookingSlotLock";
 import { UserRole } from "@/models/User";
 
@@ -36,11 +37,6 @@ export const getPublicCourtStats = asyncHandler(
   },
 );
 
-/**
- * GET /api/courts?search=&page=&limit=
- * CONG KHAI. Moi san gio co 2 muc gia (pricePerHourFixed, pricePerHourCasual),
- * khong con phan loai "san co dinh / san vang lai" rieng biet nua.
- */
 export const listCourts = asyncHandler(async (req: Request, res: Response) => {
   const { search } = req.query;
   const page = Math.max(parseInt((req.query.page as string) || "1", 10), 1);
@@ -65,6 +61,7 @@ export const listCourts = asyncHandler(async (req: Request, res: Response) => {
 
   const [courts, total] = await Promise.all([
     Court.find(filter)
+      .populate("category")
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit),
@@ -81,7 +78,7 @@ export const listCourts = asyncHandler(async (req: Request, res: Response) => {
 
 export const getCourtById = asyncHandler(
   async (req: Request, res: Response) => {
-    const court = await Court.findById(req.params.id);
+    const court = await Court.findById(req.params.id).populate("category");
     if (!court)
       throw ApiError.notFound("Khong tim thay san", "COURT_NOT_FOUND");
 
@@ -98,37 +95,41 @@ export const getCourtById = asyncHandler(
 );
 
 export const createCourt = asyncHandler(async (req: Request, res: Response) => {
-  const {
-    name,
-    description,
-    pricePerHourFixed,
-    pricePerHourCasual,
-    image,
-    isActive,
-  } = req.body;
+  const { name, description, category, image, isActive } = req.body;
+
+  const categoryDoc = await CourtCategory.findById(category);
+  if (!categoryDoc)
+    throw ApiError.badRequest("Loai san khong ton tai", "CATEGORY_NOT_FOUND");
 
   const court = await Court.create({
     name,
     description,
-    pricePerHourFixed,
-    pricePerHourCasual,
+    category,
     image,
     isActive,
     createdBy: req.user!.id,
   });
 
-  res.status(201).json(new ApiResponse("Tao san thanh cong", { court }));
+  const populated = await court.populate("category");
+  res
+    .status(201)
+    .json(new ApiResponse("Tao san thanh cong", { court: populated }));
 });
 
 export const updateCourt = asyncHandler(async (req: Request, res: Response) => {
   const court = await Court.findById(req.params.id);
   if (!court) throw ApiError.notFound("Khong tim thay san", "COURT_NOT_FOUND");
 
+  if (req.body.category !== undefined) {
+    const categoryDoc = await CourtCategory.findById(req.body.category);
+    if (!categoryDoc)
+      throw ApiError.badRequest("Loai san khong ton tai", "CATEGORY_NOT_FOUND");
+  }
+
   const allowedFields = [
     "name",
     "description",
-    "pricePerHourFixed",
-    "pricePerHourCasual",
+    "category",
     "image",
     "isActive",
   ] as const;
@@ -139,8 +140,10 @@ export const updateCourt = asyncHandler(async (req: Request, res: Response) => {
   }
 
   await court.save();
-
-  res.status(200).json(new ApiResponse("Cap nhat san thanh cong", { court }));
+  const populated = await court.populate("category");
+  res
+    .status(200)
+    .json(new ApiResponse("Cap nhat san thanh cong", { court: populated }));
 });
 
 export const deleteCourt = asyncHandler(async (req: Request, res: Response) => {
