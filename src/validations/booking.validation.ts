@@ -4,6 +4,7 @@ import { TIME_SLOTS } from "@/config/timeSlots";
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
+// Dat le (vang lai) - chi 1 buoi
 export const createBookingSchema = z.object({
   body: z.object({
     courtId: z.string().regex(objectIdRegex, "ID san khong hop le"),
@@ -20,8 +21,29 @@ export const createBookingSchema = z.object({
       )
       .min(1, "Can chon it nhat 1 khung gio")
       .max(TIME_SLOTS.length, "So khung gio vuot qua gioi han"),
-    bookingType: z.enum(["fixed", "casual"], {
-      required_error: "Vui long chon loai dat san (co dinh hoac vang lai)",
+    notes: z.string().trim().max(500).optional(),
+  }),
+});
+
+// Dang ky goi co dinh dai han
+export const createFixedBookingSchema = z.object({
+  body: z.object({
+    courtId: z.string().regex(objectIdRegex, "ID san khong hop le"),
+    startDate: z
+      .string()
+      .regex(dateRegex, "Ngay bat dau khong hop le (dinh dang YYYY-MM-DD)"),
+    slots: z
+      .array(
+        z
+          .string()
+          .refine((s) => TIME_SLOTS.includes(s), {
+            message: "Khung gio khong hop le",
+          }),
+      )
+      .min(1, "Can chon it nhat 1 khung gio")
+      .max(TIME_SLOTS.length, "So khung gio vuot qua gioi han"),
+    durationMonths: z.union([z.literal(1), z.literal(3), z.literal(6)], {
+      required_error: "Thoi han goi la bat buoc (1, 3 hoac 6 thang)",
     }),
     notes: z.string().trim().max(500).optional(),
   }),

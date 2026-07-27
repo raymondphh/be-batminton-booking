@@ -9,6 +9,7 @@ import {
   updateBookingStatusSchema,
   availabilityQuerySchema,
   listBookingsQuerySchema,
+  createFixedBookingSchema,
 } from "@/validations/booking.validation";
 
 const router = Router();
@@ -67,6 +68,16 @@ router.patch(
   authorize(UserRole.ADMIN, UserRole.MANAGER),
   validate(updateBookingStatusSchema),
   bookingController.updateBookingStatus,
+);
+
+router.get("/fixed-durations", bookingController.getFixedDurationOptions); // cong khai, dat canh route '/availability'
+
+// dat canh cac route POST '/' cua customer:
+router.post(
+  "/fixed",
+  authorize(UserRole.CUSTOMER),
+  validate(createFixedBookingSchema),
+  bookingController.createFixedBooking,
 );
 
 export default router;

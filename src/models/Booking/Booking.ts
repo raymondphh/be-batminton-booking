@@ -8,8 +8,8 @@ export enum BookingStatus {
 }
 
 export enum BookingType {
-  FIXED = "fixed",
-  CASUAL = "casual",
+  FIXED = "fixed", // dang ky goi dai han (1/3/6 thang), lap lai hang tuan
+  CASUAL = "casual", // dat le 1 buoi
 }
 
 export interface IPriceBreakdownItem {
@@ -21,18 +21,24 @@ export interface IBooking extends Document {
   _id: Types.ObjectId;
   user: Types.ObjectId;
   userName: string;
+  userEmail: string; // snapshot email tai thoi diem dat - dung de gui thong bao qua email
   court: Types.ObjectId;
   courtName: string;
   categoryName: string;
   bookingType: BookingType;
-  date: string;
+  date: string; // voi 'fixed': ngay bat dau (= startDate)
   slots: string[];
   startTime: string;
   endTime: string;
   hours: number;
-  pricePerHour: number;
+  pricePerHour: number; // gia trung binh/gio - chi de hien thi
   totalPrice: number;
-  priceBreakdown: IPriceBreakdownItem[];
+  priceBreakdown: IPriceBreakdownItem[]; // gia cho 1 lan/1 tuan (khong nhan theo so buoi)
+  // Cac field chi co gia tri khi bookingType = 'fixed'
+  durationMonths?: 1 | 3 | 6;
+  startDate?: string;
+  endDate?: string;
+  occurrenceDates?: string[]; // toan bo ngay cu the trong goi (moi tuan 1 ngay)
   status: BookingStatus;
   notes: string;
   cancelledBy?: Types.ObjectId | null;
@@ -58,6 +64,7 @@ const bookingSchema = new Schema<IBooking>(
       index: true,
     },
     userName: { type: String, required: true },
+    userEmail: { type: String, required: true },
     court: {
       type: Schema.Types.ObjectId,
       ref: "Court",
@@ -86,6 +93,10 @@ const bookingSchema = new Schema<IBooking>(
     pricePerHour: { type: Number, required: true, min: 0 },
     totalPrice: { type: Number, required: true, min: 0 },
     priceBreakdown: { type: [priceBreakdownSchema], default: [] },
+    durationMonths: { type: Number, enum: [1, 3, 6] },
+    startDate: { type: String },
+    endDate: { type: String },
+    occurrenceDates: { type: [String], default: undefined },
     status: {
       type: String,
       enum: Object.values(BookingStatus),

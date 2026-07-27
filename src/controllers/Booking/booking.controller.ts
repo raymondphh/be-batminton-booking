@@ -9,6 +9,7 @@ import {
   BookingType,
   IBooking,
 } from "@/models/Booking/Booking";
+import { FIXED_DURATION_OPTIONS } from "@/config/fixedDurations";
 import { BookingSlotLock } from "@/models/Booking/BookingSlotLock";
 import { Court } from "@/models/Court/Court";
 import { CourtCategory, IPriceRule } from "@/models/Court/CourtCategory";
@@ -68,6 +69,43 @@ const getPriceForSlot = (
     : rule.pricePerHourCasual;
 };
 
+/**
+ * Cong so thang vao 1 ngay (YYYY-MM-DD), tu xu ly truong hop ngay khong ton tai
+ * o thang dich (vi du 31/1 + 1 thang -> 28/2 hoac 29/2).
+ */
+const addMonthsToDateStr = (dateStr: string, months: number): string => {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const targetMonthIndex = m - 1 + months;
+  const targetYear = y + Math.floor(targetMonthIndex / 12);
+  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(
+    targetYear,
+    targetMonth + 1,
+    0,
+  ).getDate();
+  const targetDay = Math.min(d, lastDayOfTargetMonth);
+  return `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-${String(targetDay).padStart(2, "0")}`;
+};
+
+/**
+ * Sinh danh sach ngay cu the trong 1 goi co dinh: bat dau tu startDate,
+ * lap lai moi 7 ngay, cho den truoc ngay ket thuc (startDate + durationMonths).
+ */
+const generateWeeklyOccurrences = (
+  startDateStr: string,
+  durationMonths: number,
+): string[] => {
+  const endDateStr = addMonthsToDateStr(startDateStr, durationMonths);
+  const occurrences: string[] = [];
+  const current = new Date(`${startDateStr}T00:00:00`);
+  const end = new Date(`${endDateStr}T00:00:00`);
+  while (current < end) {
+    occurrences.push(current.toISOString().slice(0, 10));
+    current.setDate(current.getDate() + 7);
+  }
+  return occurrences;
+};
+
 const emitSlotsUpdated = async (courtId: string, date: string) => {
   try {
     const locks = await BookingSlotLock.find({ court: courtId, date }).select(
@@ -119,11 +157,10 @@ export const getAvailability = asyncHandler(
  */
 export const createBooking = asyncHandler(
   async (req: Request, res: Response) => {
-    const { courtId, date, slots, bookingType, notes } = req.body as {
+    const { courtId, date, slots, notes } = req.body as {
       courtId: string;
       date: string;
       slots: string[];
-      bookingType: BookingType;
       notes?: string;
     };
 
@@ -185,7 +222,11 @@ export const createBooking = asyncHandler(
 
     const priceBreakdown: { time: string; price: number }[] = [];
     for (const slot of uniqueSlots) {
-      const price = getPriceForSlot(slot, category.priceRules, bookingType);
+      const price = getPriceForSlot(
+        slot,
+        category.priceRules,
+        BookingType.CASUAL,
+      );
       if (price === null) {
         throw ApiError.badRequest(
           `Khung gio ${slot} chua duoc admin cai dat gia cho loai san "${category.name}"`,
@@ -207,10 +248,11 @@ export const createBooking = asyncHandler(
             {
               user: user._id,
               userName: user.fullName,
+              userEmail: user.email,
               court: court._id,
               courtName: court.name,
               categoryName: category.name,
-              bookingType,
+              bookingType: BookingType.CASUAL,
               date,
               slots: uniqueSlots,
               startTime: start,
@@ -258,12 +300,219 @@ export const createBooking = asyncHandler(
     await emitSlotsUpdated(courtId, date);
     if (booking) emitBookingUpdated(booking, "booking:new");
 
+    res.status(201).json(
+      new ApiResponse("Dat san thanh cong, cho nhan vien xac nhan", {
+        booking,
+      }),
+    );
+  },
+);
+
+/**
+ * GET /api/bookings/fixed-durations
+ * CONG KHAI - danh sach cac moc thoi han goi co dinh (1/3/6 thang).
+ */
+export const getFixedDurationOptions = asyncHandler(
+  async (_req: Request, res: Response) => {
+    res.status(200).json(
+      new ApiResponse("Lay danh sach thoi han goi thanh cong", {
+        options: FIXED_DURATION_OPTIONS,
+      }),
+    );
+  },
+);
+
+/**
+ * POST /api/bookings/fixed
+ * CHI khach hang (customer). Dang ky goi co dinh dai han: chon ngay bat dau + khung gio,
+ * lap lai hang tuan trong 1/3/6 thang. Gia dung cot "pricePerHourFixed" cua loai san.
+ *
+ * Chong double-booking cho CA CHUOI NGAY: 1 transaction ghi 1 Booking dai dien ca goi
+ * + insertMany BookingSlotLock cho TUNG (ngay, gio) trong toan bo goi.
+ */
+export const createFixedBooking = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { courtId, startDate, slots, durationMonths, notes } = req.body as {
+      courtId: string;
+      startDate: string;
+      slots: string[];
+      durationMonths: 1 | 3 | 6;
+      notes?: string;
+    };
+
+    const uniqueSlots = Array.from(new Set(slots));
+    if (uniqueSlots.length !== slots.length) {
+      throw ApiError.badRequest(
+        "Danh sach khung gio bi trung lap",
+        "DUPLICATE_SLOTS",
+      );
+    }
+    if (!areConsecutive(uniqueSlots)) {
+      throw ApiError.badRequest(
+        "Cac khung gio phai lien tiep nhau",
+        "SLOTS_NOT_CONSECUTIVE",
+      );
+    }
+
+    const todayStr = getTodayStr();
+    if (startDate < todayStr) {
+      throw ApiError.badRequest(
+        "Ngay bat dau khong the o trong qua khu",
+        "DATE_IN_PAST",
+      );
+    }
+    if (startDate === todayStr) {
+      const currentHour = new Date().getHours();
+      const hasPastSlot = uniqueSlots.some(
+        (s) => parseInt(s.split(":")[0], 10) <= currentHour,
+      );
+      if (hasPastSlot) {
+        throw ApiError.badRequest(
+          "Khong the dat khung gio da qua trong ngay hom nay",
+          "SLOT_IN_PAST",
+        );
+      }
+    }
+
+    if (!FIXED_DURATION_OPTIONS.some((o) => o.months === durationMonths)) {
+      throw ApiError.badRequest(
+        "Thoi han goi khong hop le",
+        "INVALID_DURATION",
+      );
+    }
+
+    const court = await Court.findById(courtId);
+    if (!court)
+      throw ApiError.notFound("Khong tim thay san", "COURT_NOT_FOUND");
+    if (!court.isActive)
+      throw ApiError.badRequest(
+        "San nay hien khong hoat dong",
+        "COURT_INACTIVE",
+      );
+
+    const category = await CourtCategory.findById(court.category);
+    if (!category)
+      throw ApiError.badRequest(
+        "San nay chua duoc gan loai san hop le",
+        "CATEGORY_NOT_FOUND",
+      );
+
+    const user = await User.findById(req.user!.id);
+    if (!user)
+      throw ApiError.notFound("Khong tim thay nguoi dung", "USER_NOT_FOUND");
+
+    const occurrenceDates = generateWeeklyOccurrences(
+      startDate,
+      durationMonths,
+    );
+    if (occurrenceDates.length === 0) {
+      throw ApiError.badRequest(
+        "Khong tinh duoc lich dang ky, vui long kiem tra lai ngay bat dau",
+        "INVALID_SCHEDULE",
+      );
+    }
+
+    const { start, end, hours } = buildTimeRange(uniqueSlots);
+
+    // Gia cho 1 buoi/1 tuan (dung cot "co dinh")
+    const priceBreakdown: { time: string; price: number }[] = [];
+    for (const slot of uniqueSlots) {
+      const price = getPriceForSlot(
+        slot,
+        category.priceRules,
+        BookingType.FIXED,
+      );
+      if (price === null) {
+        throw ApiError.badRequest(
+          `Khung gio ${slot} chua duoc admin cai dat gia co dinh cho loai san "${category.name}"`,
+          "PRICE_NOT_CONFIGURED",
+        );
+      }
+      priceBreakdown.push({ time: slot, price });
+    }
+    const weeklyTotal = priceBreakdown.reduce((s, p) => s + p.price, 0);
+    const totalPrice = weeklyTotal * occurrenceDates.length;
+    const pricePerHour = Math.round(weeklyTotal / hours);
+
+    const session = await mongoose.startSession();
+    let createdBookingId: mongoose.Types.ObjectId | undefined;
+
+    try {
+      await session.withTransaction(async () => {
+        const [booking] = await Booking.create(
+          [
+            {
+              user: user._id,
+              userName: user.fullName,
+              userEmail: user.email,
+              court: court._id,
+              courtName: court.name,
+              categoryName: category.name,
+              bookingType: BookingType.FIXED,
+              date: startDate,
+              slots: uniqueSlots,
+              startTime: start,
+              endTime: end,
+              hours,
+              pricePerHour,
+              totalPrice,
+              priceBreakdown,
+              durationMonths,
+              startDate,
+              endDate: occurrenceDates[occurrenceDates.length - 1],
+              occurrenceDates,
+              status: BookingStatus.PENDING,
+              notes: notes || "",
+            },
+          ],
+          { session },
+        );
+
+        const lockDocs = occurrenceDates.flatMap((occDate) =>
+          uniqueSlots.map((time) => ({
+            court: court._id,
+            date: occDate,
+            time,
+            booking: booking._id,
+          })),
+        );
+
+        try {
+          await BookingSlotLock.insertMany(lockDocs, {
+            session,
+            ordered: true,
+          });
+        } catch (err: unknown) {
+          const mongoErr = err as { code?: number };
+          if (mongoErr?.code === 11000) {
+            throw ApiError.conflict(
+              "Rat tiec, mot hoac nhieu buoi trong lich dang ky nay da bi trung voi lich khac. Vui long doi khung gio hoac ngay bat dau khac.",
+              "SLOT_ALREADY_BOOKED",
+            );
+          }
+          throw err;
+        }
+
+        createdBookingId = booking._id;
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    const booking = await Booking.findById(createdBookingId);
+
+    for (const occDate of occurrenceDates) {
+      await emitSlotsUpdated(courtId, occDate);
+    }
+    if (booking) emitBookingUpdated(booking, "booking:new");
+
     res
       .status(201)
       .json(
-        new ApiResponse("Dat san thanh cong, cho nhan vien xac nhan", {
-          booking,
-        }),
+        new ApiResponse(
+          "Dang ky goi co dinh thanh cong, cho nhan vien xac nhan",
+          { booking },
+        ),
       );
   },
 );
@@ -365,7 +614,12 @@ export const updateBookingStatus = asyncHandler(
     );
 
     if (status === BookingStatus.CANCELLED) {
-      await emitSlotsUpdated(booking.court.toString(), booking.date);
+      const datesToNotify = booking.occurrenceDates?.length
+        ? booking.occurrenceDates
+        : [booking.date];
+      for (const d of datesToNotify) {
+        await emitSlotsUpdated(booking.court.toString(), d);
+      }
     }
     emitBookingUpdated(booking, "booking:updated");
   },
@@ -410,7 +664,12 @@ export const cancelMyBooking = asyncHandler(
       .status(200)
       .json(new ApiResponse("Huy don dat san thanh cong", { booking }));
 
-    await emitSlotsUpdated(booking.court.toString(), booking.date);
+    const datesToNotify = booking.occurrenceDates?.length
+      ? booking.occurrenceDates
+      : [booking.date];
+    for (const d of datesToNotify) {
+      await emitSlotsUpdated(booking.court.toString(), d);
+    }
     emitBookingUpdated(booking, "booking:updated");
   },
 );
